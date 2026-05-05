@@ -1,420 +1,101 @@
 ---
-name: hello-world-template
-description: A comprehensive template skill demonstrating all skill features and patterns. Use this as a starting point when creating new skills. Shows examples of scripts, references, assets, workflow patterns, and best practices for skill development.
+name: platform-best-practices
+description: Kubernetes deployment standards, SLA tiers, health check conventions, and team ownership mappings for platform operations
 ---
 
-# Hello World Template
+# Platform Best Practices
 
+Operational knowledge base for platform engineering. Use this knowledge to assess service health, classify incident severity, determine escalation paths, and recommend actions aligned with organizational standards.
 
-## Overview
+## Service SLA Tiers
 
-This is a comprehensive template skill that demonstrates all the key features and patterns available in the Claude skill system. Use this as a foundation when creating new skills.
+| Tier | Description | Response Time | Resolution Target | Examples |
+|------|-------------|---------------|-------------------|----------|
+| P0 — Critical | Complete service outage or data loss | 15 minutes | 1 hour | payments down, auth unavailable |
+| P1 — High | Service degraded, users impacted | 30 minutes | 4 hours | payments latency > 500ms, error rate > 10% |
+| P2 — Medium | Partial degradation, workaround exists | 2 hours | 24 hours | non-critical feature unavailable, elevated error rate < 5% |
+| P3 — Low | Cosmetic or minor issue, no user impact | 1 business day | 1 week | dashboard rendering issue, log noise |
 
-This template shows:
-- How to structure SKILL.md with clear sections
-- Examples of using scripts, references, and assets
-- Different workflow patterns (sequential, conditional, task-based)
-- Template and example patterns for consistent output
-- Best practices for progressive disclosure
+When assessing severity, always use measured metrics against these thresholds — never guess.
 
-## Quick Start
+## Health Check Conventions
 
-When creating a new skill based on this template:
+All services expose standard health endpoints:
 
-1. Copy this skill directory and rename it
-2. Update the frontmatter (name and description)
-3. Replace example content with your domain-specific content
-4. Customize or delete resource directories (scripts/, references/, assets/) based on needs
-5. Test the skill and iterate
+| Endpoint | Purpose | Healthy Response |
+|----------|---------|-----------------|
+| `/healthz` | Liveness probe — is the process alive? | HTTP 200, body: `{"status": "ok"}` |
+| `/readyz` | Readiness probe — can it serve traffic? | HTTP 200, body: `{"status": "ready"}` |
+| `/metrics` | Prometheus metrics endpoint | HTTP 200, Prometheus text format |
 
-## Workflow Decision Tree
+### Degradation Thresholds
 
-Choose the appropriate workflow based on the user's request:
+| Metric | Healthy | Warning | Critical |
+|--------|---------|---------|----------|
+| Latency (p99) | < 100ms | 100ms–500ms | > 500ms |
+| Error rate | < 1% | 1%–5% | > 5% |
+| Uptime (30-day) | > 99.9% | 99.0%–99.9% | < 99.0% |
+| CPU utilization | < 60% | 60%–85% | > 85% |
+| Memory utilization | < 70% | 70%–90% | > 90% |
 
-**Simple demonstration?** → Follow "Hello World Demo" below  
-**Learning about scripts?** → Follow "Using Scripts" section  
-**Learning about references?** → Follow "Using References" section  
-**Learning about assets?** → Follow "Using Assets" section
-**Creating a new skill?** → Follow "Skill Development Process" section
+## Deployment Standards
 
-## Hello World Demo
+### Replica Counts by Tier
 
-This demonstrates a simple workflow pattern.
+| Service Tier | Min Replicas | Max Replicas | Pod Disruption Budget |
+|-------------|-------------|-------------|----------------------|
+| P0 (Critical) | 3 | 10 | maxUnavailable: 1 |
+| P1 (High) | 2 | 8 | maxUnavailable: 1 |
+| P2 (Medium) | 2 | 5 | maxUnavailable: 50% |
+| P3 (Low) | 1 | 3 | none |
 
-### Step 1: Greet the User
+### Resource Limits
 
-Execute the greeting script to demonstrate script usage:
-```bash
-python3 scripts/hello_world.py --name "User"
-```
+| Service Tier | CPU Request | CPU Limit | Memory Request | Memory Limit |
+|-------------|------------|-----------|---------------|-------------|
+| P0 (Critical) | 500m | 2000m | 512Mi | 2Gi |
+| P1 (High) | 250m | 1000m | 256Mi | 1Gi |
+| P2 (Medium) | 100m | 500m | 128Mi | 512Mi |
+| P3 (Low) | 50m | 250m | 64Mi | 256Mi |
 
-### Step 2: Load Reference Material
+### Rollback Policy
 
-If additional context is needed, read the reference documentation:
-```bash
-cat references/example_guide.md
-```
+- **Automatic rollback** if error rate exceeds 10% within 5 minutes of deployment
+- **Canary deployments** required for P0/P1 services: 10% traffic for 5 minutes before full rollout
+- **Rolling updates** for P2/P3: maxSurge 25%, maxUnavailable 25%
+- **Change freeze**: No P0/P1 deployments on Fridays after 14:00 UTC or during active incidents
 
-### Step 3: Use Template Assets
+## Team Ownership
 
-Copy the example template from assets/ and customize it:
-```bash
-cp assets/template.txt output.txt
-```
+| Service | Owner Team | Slack Channel | On-Call Rotation |
+|---------|-----------|---------------|-----------------|
+| payments | payments-team | #payments-eng | payments-oncall (PagerDuty) |
+| auth | identity-team | #identity-eng | identity-oncall (PagerDuty) |
+| orders | commerce-team | #orders-eng | commerce-oncall (PagerDuty) |
+| inventory | commerce-team | #inventory-eng | commerce-oncall (PagerDuty) |
+| notifications | platform-team | #notifications-eng | platform-oncall (PagerDuty) |
 
-## Using Scripts
+## Escalation Procedures
 
-Scripts (`scripts/`) contain executable code for deterministic operations.
+### When to Escalate
 
-### When to Use Scripts
+| Condition | Action |
+|-----------|--------|
+| P0 incident detected | Page on-call immediately, notify #incident-response, assign Incident Commander |
+| P1 lasting > 30 minutes | Page on-call, notify team Slack channel |
+| P2 lasting > 4 hours | Notify team Slack channel, create follow-up ticket |
+| P3 | No escalation — track in backlog |
 
-- Tasks requiring exact, reproducible results
-- Complex algorithms that would be error-prone to rewrite
-- Operations requiring specific library versions
-- File processing utilities
+### Escalation Chain
 
-### Example Script Usage
+1. **On-call engineer** — first responder, owns triage and initial mitigation
+2. **Team lead** — escalated if on-call cannot resolve within response time SLA
+3. **Engineering manager** — escalated for cross-team coordination or customer-facing P0
+4. **VP Engineering** — escalated for extended P0 outages (> 2 hours)
 
-The included `hello_world.py` demonstrates:
-- Command-line argument parsing
-- Error handling
-- Multiple output formats
+### Incident Commander Responsibilities
 
-Execute with parameters:
-```bash
-# Basic usage
-python3 scripts/hello_world.py --name "World"
-
-# JSON output format
-python3 scripts/hello_world.py --name "World" --format json
-
-# With custom message
-python3 scripts/hello_world.py --name "World" --message "Welcome"
-```
-
-### Script Pattern
-
-Scripts should:
-- Include clear docstrings explaining purpose
-- Handle errors gracefully
-- Accept parameters for flexibility
-- Return appropriate exit codes
-
-## Using References
-
-References (`references/`) contain documentation loaded into context when needed.
-
-### When to Use References
-
-- Detailed API documentation
-- Database schemas
-- Comprehensive workflow guides
-- Domain-specific knowledge
-- Policy documents
-
-### Example Reference Usage
-
-Read the example guide when detailed information is needed:
-```bash
-cat references/example_guide.md
-```
-
-The guide demonstrates:
-- Structured documentation format
-- Code examples
-- Best practices
-- Troubleshooting tips
-
-### Reference Pattern
-
-For large reference files (>10k words), include search guidance in SKILL.md:
-```markdown
-## Finding Information in References
-
-Use grep to search for specific topics:
-- API endpoints: `grep -n "endpoint" references/api_guide.md`
-- Error codes: `grep -n "error" references/troubleshooting.md`
-```
-
-## Using Assets
-
-Assets (`assets/`) contain files used in final output, not loaded into context.
-
-### When to Use Assets
-
-- Document templates (.docx, .pptx)
-- Boilerplate code projects
-- Images, logos, icons
-- Fonts
-- Sample data files
-
-### Example Asset Usage
-
-The included template demonstrates asset usage:
-```bash
-# Copy template to working directory
-cp assets/template.txt my_document.txt
-
-# Customize the template
-echo "Custom content here" >> my_document.txt
-```
-
-### Asset Pattern
-
-Assets should be:
-- Ready-to-use files
-- Well-organized by type
-- Documented in SKILL.md with usage examples
-- Minimal in size (avoid large files when possible)
-
-## Skill Development Process
-
-Follow this workflow when creating new skills:
-
-### 1. Understand Use Cases
-
-Gather concrete examples:
-- What will users ask for?
-- What functionality is needed?
-- What are trigger phrases?
-
-### 2. Plan Resources
-
-Determine what bundled resources will help:
-- **Scripts**: What operations are repeated or error-prone?
-- **References**: What documentation should Claude reference?
-- **Assets**: What files will be used in outputs?
-
-### 3. Choose Structure Pattern
-
-Select the organizational pattern that fits:
-
-**Sequential Workflow** - For step-by-step processes:
-```markdown
-## Process Overview
-1. Step one
-2. Step two  
-3. Step three
-
-## Step 1: Details
-[Instructions]
-
-## Step 2: Details
-[Instructions]
-```
-
-**Task-Based** - For tool collections:
-```markdown
-## Quick Start
-[Basic usage]
-
-## Task Category 1
-[Operations]
-
-## Task Category 2
-[Operations]
-```
-
-**Reference/Guidelines** - For standards:
-```markdown
-## Guidelines Overview
-[Summary]
-
-## Specification 1
-[Details]
-
-## Specification 2
-[Details]
-```
-
-**Conditional Workflow** - For branching logic:
-```markdown
-## Decision Point
-**Condition A?** → Follow workflow A
-**Condition B?** → Follow workflow B
-
-## Workflow A
-[Steps]
-
-## Workflow B
-[Steps]
-```
-
-### 4. Write SKILL.md
-
-Follow these guidelines:
-
-**Frontmatter:**
-- `name`: Hyphen-case identifier matching directory name
-- `description`: Complete explanation including WHEN to use the skill
-
-**Body:**
-- Use imperative/infinitive form ("Run the script" not "Running the script")
-- Keep under 500 lines (split into references if longer)
-- Provide concrete examples
-- Reference bundled resources clearly
-
-### 5. Create Resources
-
-**Scripts:**
-- Make executable (`chmod +x`)
-- Include usage examples in comments
-- Test thoroughly
-
-**References:**
-- Structure with clear headers
-- Include search patterns for large files
-- Avoid duplicating SKILL.md content
-
-**Assets:**
-- Keep file sizes reasonable
-- Document expected usage
-- Organize by type
-
-### 6. Test and Iterate
-
-- Use the skill on real tasks
-- Note struggles or inefficiencies
-- Update based on usage patterns
-- Validate with `quick_validate.py`
-
-## Output Patterns
-
-### Template Pattern
-
-For consistent output format, provide explicit templates:
-
-**Example: Report Structure**
-```markdown
-# [Title]
-
-## Executive Summary
-[One paragraph overview]
-
-## Key Findings
-- Finding 1 with data
-- Finding 2 with data
-- Finding 3 with data
-
-## Recommendations
-1. Specific action
-2. Specific action
-```
-
-### Example Pattern
-
-For style and format guidance, provide input/output examples:
-
-**Example: Code Documentation**
-
-Input: Function that calculates fibonacci numbers
-Output:
-```python
-def fibonacci(n: int) -> int:
-    """
-    Calculate the nth Fibonacci number.
-    
-    Args:
-        n: Position in sequence (0-indexed)
-        
-    Returns:
-        The Fibonacci number at position n
-        
-    Example:
-        >>> fibonacci(6)
-        8
-    """
-```
-
-## Advanced Patterns
-
-### Progressive Disclosure
-
-Keep SKILL.md concise by splitting content:
-```markdown
-## Basic Usage
-[Core instructions]
-
-## Advanced Features
-For detailed information, see:
-- Form filling: `references/forms.md`
-- API reference: `references/api.md`
-- Examples: `references/examples.md`
-```
-
-### Conditional Resource Loading
-
-Guide Claude to load references based on context:
-```markdown
-## Working with APIs
-
-For REST APIs, see `references/rest_api.md`  
-For GraphQL APIs, see `references/graphql.md`  
-For authentication patterns, see `references/auth.md`
-```
-
-### Multi-Framework Support
-
-For skills supporting multiple tools/frameworks:
-```markdown
-## Framework Selection
-
-**Using React?** → See `references/react.md`  
-**Using Vue?** → See `references/vue.md`  
-**Using Angular?** → See `references/angular.md`
-```
-
-## Best Practices
-
-### Conciseness
-- Challenge every sentence: "Does Claude really need this?"
-- Prefer examples over explanations
-- Use references for detailed docs
-
-### Clarity
-- Use imperative form
-- Provide concrete examples
-- Show, don't just tell
-
-### Context Efficiency
-- Keep SKILL.md under 500 lines
-- Use progressive disclosure
-- Load references only when needed
-
-### Completeness
-- Document all bundled resources
-- Include error handling guidance
-- Provide usage examples
-
-## Validation and Packaging
-
-Before distributing the skill:
-
-1. **Validate structure:**
-```bash
-python3 /mnt/skills/examples/skill-creator/scripts/quick_validate.py /path/to/skill
-```
-
-2. **Package for distribution:**
-```bash
-python3 /mnt/skills/examples/skill-creator/scripts/package_skill.py /path/to/skill
-```
-
-The validator checks:
-- YAML frontmatter format
-- Required fields present
-- Naming conventions
-- File organization
-
-## Next Steps
-
-After reviewing this template:
-
-1. Copy to create your own skill
-2. Update frontmatter with your skill name and description
-3. Replace example content with domain-specific material
-4. Remove unused resource directories
-5. Test with real queries
-6. Iterate based on usage
-
-For detailed guidance, see the skill-creator skill in `/mnt/skills/examples/skill-creator/`.
+- Owns the incident Slack thread in #incident-response
+- Coordinates across teams if multiple services affected
+- Publishes status updates every 15 minutes during P0, every 30 minutes during P1
+- Initiates post-incident review within 48 hours of resolution
