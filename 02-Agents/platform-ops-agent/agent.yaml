@@ -1,4 +1,4 @@
-agentName: platform-ops-agent
+agentName: platformopsagent
 image: ghcr.io/platform-ops-agent:latest
 language: python
 framework: adk
@@ -19,6 +19,7 @@ skills:
   - name: platform-best-practices
     registryURL: http://localhost:12121
     registrySkillName: platform-best-practices
+    registrySkillVersion: 1.0.0
 prompts:
   - name: strict-operator
     registryURL: http://localhost:12121

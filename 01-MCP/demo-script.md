@@ -11,50 +11,39 @@
 
 ---
 
-## Act 1: Build the Ops Server (~1.5 min)
+## Act 1: Scaffold the MCP Server (~1 min)
 
 ```bash
 # Scaffold
 arctl mcp init python ops-server
-# Description: DevOps platform engineering MCP server
-# Author: Sebastian Maniak
+# Description: Customer ops and knowledge base MCP server
+# Author: Sebastian
 # Email: sebastian.maniak@solo.io
 
 # Show the default tool
 cat ops-server/src/tools/echo.py
-# "Here's the default echo tool — let's replace it with something useful"
+# "Here's the default echo tool — let's replace it with real ops tools"
+```
 
+## Act 2: Add Tools & Build (~1.5 min)
+
+```bash
 # Add our tools
-arctl mcp add-tool get_service_health --project-dir ops-server
-arctl mcp add-tool list_deployments --project-dir ops-server
-arctl mcp add-tool get_logs --project-dir ops-server
+arctl mcp add-tool search_docs --project-dir ops-server
+arctl mcp add-tool get_ticket --project-dir ops-server
+arctl mcp add-tool list_open_tickets --project-dir ops-server
 
 # [Copy in the pre-written tool implementations]
 # Show the tool code briefly:
-cat ops-server/src/tools/get_service_health.py
+cat ops-server/src/tools/search_docs.py
+cat ops-server/src/tools/get_ticket.py
 
 # Show all tools
 ls ops-server/src/tools/
 
-# Build and publish
+# Build and publish to the registry
 arctl mcp build ops-server --image ops-server
 arctl mcp publish ops-server --type oci --package-id ops-server
-```
-
-## Act 2: Build the Support Server (~1 min)
-
-```bash
-arctl mcp init python support-server
-# Description: Customer support and knowledge base MCP server
-
-arctl mcp add-tool search_docs --project-dir support-server
-arctl mcp add-tool get_ticket --project-dir support-server
-arctl mcp add-tool list_open_tickets --project-dir support-server
-
-# [Copy in the pre-written tool implementations]
-
-arctl mcp build support-server --image support-server
-arctl mcp publish support-server --type oci --package-id support-server
 ```
 
 ## Act 3: The Registry (~30s)
@@ -63,55 +52,59 @@ arctl mcp publish support-server --type oci --package-id support-server
 arctl mcp list
 ```
 
-Then open http://localhost:12121 and show both servers in the UI.
+Then open http://localhost:12121 and show the server in the UI.
 
-## Act 4: Deploy to Kubernetes (~1 min)
+## Act 4: Deploy Locally (~30s)
 
 ```bash
-# Load images to kind (since we built locally)
-kind load docker-image ops-server:0.1.0 --name agentregistry
-kind load docker-image support-server:0.1.0 --name agentregistry
-
-# Deploy
-arctl deployments create ops-server \
+arctl deployments create sebastianmaniak/ops-server \
   --type mcp \
-  --provider-id kubernetes-default \
-  --namespace default \
   --version 0.1.0
+```
 
-arctl deployments create support-server \
+## Act 5: Deploy to Kubernetes (~1 min)
+
+```bash
+# Load image to kind (since we built locally)
+kind load docker-image ops-server:latest --name kagent
+
+# Deploy to the kind cluster
+arctl deployments create sebastianmaniak/ops-server \
   --type mcp \
   --provider-id kubernetes-default \
   --namespace default \
   --version 0.1.0
 
 # Verify
-kubectl get pods | grep -E "ops-server|support-server"
+kubectl get pods -n kagent | grep ops-server
 ```
 
-## Act 5: The AI Agent (~1 min)
+## Act 6: The AI Agent (~1 min)
 
-Open Claude Code. Add both MCP servers:
+Open Claude Code. Add the MCP server:
 
 ```bash
-claude mcp add ops-server --transport http --url http://localhost:21212/mcp
-claude mcp add support-server --transport http --url http://localhost:21213/mcp
+claude mcp add --transport http ops-server http://localhost:21212/mcp
 ```
+claude mcp add --transport http ops-server1 http://172.18.0.3/mcp
 
 ### Demo prompts (in order):
 
-1. **"Check the health of the payments service"**
-   Claude calls `get_service_health` -> sees degraded (89.2% uptime, 12.5% error rate)
+1. **"Show me all open ops tickets"**
+   Claude calls `list_open_tickets` -> sees TICK-1042 (payment timeout errors), TICK-1057 (502 gateway errors), etc.
 
-2. **"Are there any support tickets related to payments?"**
-   Claude calls `list_open_tickets` -> finds TICK-1042 (timeout errors) and TICK-1057 (502 gateway errors)
+2. **"Get the details on ticket TICK-1042"**
+   Claude calls `get_ticket` -> full ticket detail with customer context, timestamps, severity
 
-3. **"Summarize what's going on with payments and what our customers are experiencing"**
-   Claude synthesizes both -> incident summary connecting infra issues with customer impact
+3. **"Search our docs for anything related to payment timeouts"**
+   Claude calls `search_docs` -> finds relevant KB articles and troubleshooting guides
+
+4. **"Based on everything you've found, draft a response for the customer on TICK-1042"**
+   Claude synthesizes tickets + docs -> writes a customer-ready response with root cause and next steps
 
 ### Punchline:
 
-> "Two teams, two MCP servers, one registry, one AI agent connecting the dots — built in under 5 minutes."
+> "From zero to an AI-powered ops agent — scaffolded, registered, deployed, and connected — in under 5 minutes."
 
 ---
 
@@ -120,7 +113,5 @@ claude mcp add support-server --transport http --url http://localhost:21213/mcp
 ```bash
 arctl deployments list
 arctl deployments delete <ops-deployment-id>
-arctl deployments delete <support-deployment-id>
 arctl mcp delete ops-server --version 0.1.0
-arctl mcp delete support-server --version 0.1.0
 ```

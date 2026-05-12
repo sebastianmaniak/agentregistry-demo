@@ -3,7 +3,7 @@ name = "ops-server"
 version = "0.1.0"
 description = "ops-server MCP server built with FastMCP"
 authors = [
-    {name = "Unknown Author"}
+    {name = "SebastianManiak", email = "sebast@maniak.io"}
 ]
 readme = "README.md"
 requires-python = ">=3.12"

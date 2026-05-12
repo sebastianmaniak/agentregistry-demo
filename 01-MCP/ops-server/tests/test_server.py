@@ -78,14 +78,14 @@ class TestDynamicMCPServer:
 
         with patch.object(server.mcp, 'run') as mock_run:
             server.run(transport_mode="http", host="0.0.0.0", port=8080)
-            mock_run.assert_called_once_with(transport="http", host="0.0.0.0", port=8080, path="/mcp", stateless_http=False)
+            mock_run.assert_called_once_with(transport="http", host="0.0.0.0", port=8080, path="/mcp")
 
     def test_http_transport_configuration(self) -> None:
         """Test HTTP transport configuration is passed to FastMCP."""
         server = DynamicMCPServer(name="Test Server", tools_dir="src/tools")
         with patch.object(server.mcp, 'run') as mock_run:
             server.run(transport_mode="http", host="localhost", port=3000)
-            mock_run.assert_called_once_with(transport="http", host="localhost", port=3000, path="/mcp", stateless_http=False)
+            mock_run.assert_called_once_with(transport="http", host="localhost", port=3000, path="/mcp")
             kwargs = mock_run.call_args.kwargs
             assert kwargs["transport"] == "http"
             assert kwargs["host"] == "localhost"
@@ -115,4 +115,5 @@ class TestToolLoading:
         # Verify that tools were loaded
         assert len(server.loaded_tools) > 0
 
-        assert "get_service_health" in server.loaded_tools
+        # Verify that echo tool specifically was loaded
+        assert "echo" in server.loaded_tools
